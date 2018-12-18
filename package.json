@@ -1,0 +1,21 @@
+{
+  "name": "ts-unassertify",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "lint": "tslint ./src/**/*.ts",
+    "lint:fix": "tslint --fix"
+  },
+  "dependencies": {
+    "commander": "^2.19.0",
+    "typescript": "^3.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^10.12.15",
+    "prettier": "^1.15.3",
+    "tslint": "^5.12.0",
+    "tslint-config-prettier": "^1.17.0",
+    "tslint-plugin-prettier": "^2.0.1"
+  }
+}
