@@ -37,7 +37,6 @@ function main() {
         console.error(err);
         process.exit(1);
       }
-      compilerOptions.outDir = "../lib2";
       createProgram(files, compilerOptions as any)
         .getSourceFiles()
         .filter(s => {
@@ -76,10 +75,56 @@ function createProgram(
       onError,
       shouldCreateNewSourceFile
     );
-    const result = ts.transform(src, []);
+    const result = ts.transform(src, [removeImport, removeAssertExpression]);
     result.dispose();
     return result.transformed[0] as ts.SourceFile;
   };
 
   return ts.createProgram(fileNames, options, host);
 }
+
+const removeImport = <T extends ts.Node>(context: ts.TransformationContext) => (
+  rootNode: T
+) => {
+  function visit(node: ts.Node): ts.Node {
+    node = ts.visitEachChild(node, visit, context);
+    if (!ts.isImportDeclaration(node)) {
+      return node;
+    }
+    const importDecl: ts.ImportDeclaration = node;
+    if ((importDecl.moduleSpecifier as any).text === "assert") {
+      return null;
+    }
+
+    return node;
+  }
+  return ts.visitNode(rootNode, visit);
+};
+const removeAssertExpression = <T extends ts.Node>(
+  context: ts.TransformationContext
+) => (rootNode: T) => {
+  function visit(node: ts.Node): ts.Node {
+    node = ts.visitEachChild(node, visit, context);
+    if (!ts.isExpressionStatement(node)) {
+      return node;
+    }
+    if (!ts.isCallExpression(node.expression)) {
+      return node;
+    }
+    const call: ts.CallExpression = node.expression;
+    if ((call.expression as any).escapedTxt === "assert") {
+      return null;
+    }
+    if (!ts.isPropertyAccessExpression(call.expression)) {
+      return node;
+    }
+    const propAccess: ts.PropertyAccessExpression = call.expression;
+
+    if ((propAccess.expression as any).escapedText === "assert") {
+      return null;
+    }
+
+    return node;
+  }
+  return ts.visitNode(rootNode, visit);
+};
