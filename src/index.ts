@@ -1,25 +1,26 @@
 #!/usr/bin/env node
 
-import commander from "commander";
 import * as path from "path";
-import * as pack from "../package.json";
-const { version } = pack as any;
-import recursive from "recursive-readdir";
 import * as ts from "typescript";
 import * as tsconfig from "../tsconfig.json";
 const { compilerOptions } = tsconfig;
+import arg from "arg";
+import recursive from "recursive-readdir";
 
 main();
 
 function main() {
-  const program = new commander.Command();
-  program
-    .version(version)
-    .option("-p, --path", "root dir path", process.cwd())
-    .option("-o, --out", "output dir path", path.resolve(process.cwd(), "out"))
-    .parse(process.argv);
+  const args = arg({
+    "--out": String,
+    "--path": String
+  });
+  const srcpath = args["--path"];
+  if (!srcpath || srcpath === "") {
+    console.log("path is required");
+    return;
+  }
 
-  const rootPath = path.resolve(process.cwd(), program.path);
+  const rootPath = path.resolve(process.cwd(), srcpath);
 
   recursive(
     rootPath,
@@ -37,39 +38,48 @@ function main() {
         process.exit(1);
       }
       compilerOptions.outDir = "../lib2";
-      compile(files, compilerOptions as any);
+      createProgram(files, compilerOptions as any)
+        .getSourceFiles()
+        .filter(s => {
+          return (
+            !s.fileName.includes("node_modules") && s.fileName.endsWith(".ts")
+          );
+        })
+        .forEach(s => {
+          console.log(s.fileName);
+          const printer = ts.createPrinter();
+          console.log(printer.printFile(s));
+        });
     }
   );
 }
 
-function compile(fileNames: string[], options: ts.CompilerOptions): void {
-  const pg = ts.createProgram(fileNames, options);
-  const emitResult = pg.emit();
-
-  const allDiagnostics = ts
-    .getPreEmitDiagnostics(pg)
-    .concat(emitResult.diagnostics);
-
-  allDiagnostics.forEach(diagnostic => {
-    if (diagnostic.file) {
-      const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(
-        diagnostic.start!
-      );
-      const message = ts.flattenDiagnosticMessageText(
-        diagnostic.messageText,
-        "\n"
-      );
-      console.log(
-        `${diagnostic.file.fileName} (${line + 1},${character + 1}): ${message}`
-      );
-    } else {
-      console.log(
-        `${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`
-      );
-    }
+function createProgram(
+  fileNames: string[],
+  options: ts.CompilerOptions
+): ts.Program {
+  const host = ts.createCompilerHost({
+    noEmit: true,
+    noEmitOnError: false,
+    target: ts.ScriptTarget.ES5
   });
+  const orgGetSourceFile = host.getSourceFile;
+  host.getSourceFile = (
+    fileName: string,
+    scriptTarget: ts.ScriptTarget,
+    onError?: (message: string) => void,
+    shouldCreateNewSourceFile?: boolean
+  ): ts.SourceFile => {
+    const src = orgGetSourceFile(
+      fileName,
+      scriptTarget,
+      onError,
+      shouldCreateNewSourceFile
+    );
+    const result = ts.transform(src, []);
+    result.dispose();
+    return result.transformed[0] as ts.SourceFile;
+  };
 
-  const exitCode = emitResult.emitSkipped ? 1 : 0;
-  console.log(`Process exiting with code '${exitCode}'.`);
-  process.exit(exitCode);
+  return ts.createProgram(fileNames, options, host);
 }
