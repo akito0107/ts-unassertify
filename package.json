@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "arg": "^3.0.0",
-    "node-dir": "^0.1.17",
     "recursive-readdir": "^2.2.2",
     "typescript": "^3.2.2"
   },
